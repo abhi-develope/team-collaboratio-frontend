@@ -21,25 +21,31 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const response = await authAPI.getMe();
-          setUser(response.data.user);
-
+          const token = localStorage.getItem("token");
           if (token) {
+            const response = await authAPI.getMe();
+            setUser(response.data.user);
+            setToken(token);
             socketService.connect(token);
+          } else {
+            setUser(null);
           }
         } catch (error) {
           console.error("Error fetching user:", error);
           setUser(null);
+          localStorage.removeItem("token");
+          setToken(null);
         }
       } else {
         setUser(null);
+        setToken(null);
         socketService.disconnect();
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [token]);
+  }, []);
 
   const login = async (email, password) => {
     try {
@@ -91,7 +97,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, register, logout, token }}
+      value={{ user, loading, login, register, logout, token, setUser }}
     >
       {children}
     </AuthContext.Provider>

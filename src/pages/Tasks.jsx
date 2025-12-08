@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { taskAPI, projectAPI } from "@/services/api";
-import { TASK_STATUS, STATUS_LABELS, STATUS_COLORS } from "@/utils/constants";
+import { taskAPI, projectAPI, teamAPI } from "@/services/api";
+import { TASK_STATUS, STATUS_LABELS, STATUS_COLORS, ROLES } from "@/utils/constants";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/Button";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/Card";
@@ -9,32 +9,48 @@ import Badge from "@/components/Badge";
 import Modal from "@/components/Modal";
 import Input from "@/components/Input";
 import Select from "@/components/Select";
-import { Plus, Trash2 } from "lucide-react";
+import Avatar from "@/components/Avatar";
+import { Plus, Trash2, User } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function Tasks() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [selectedProject, setSelectedProject] = useState("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
     projectId: "",
     status: TASK_STATUS.TODO,
+    assignedTo: "",
   });
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+    if (user?.teamId) {
+      fetchTeamMembers();
+    }
+  }, [user?.teamId]);
 
   useEffect(() => {
     if (selectedProject) {
       fetchTasks();
     }
   }, [selectedProject]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await teamAPI.getMembers(user.teamId);
+      setTeamMembers(response.data.members || []);
+    } catch (error) {
+      console.error("Failed to fetch team members:", error);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -52,7 +68,22 @@ export default function Tasks() {
     setLoading(true);
     try {
       const response = await taskAPI.getAll(selectedProject);
-      setTasks(response.data?.tasks || []);
+      let fetchedTasks = response.data?.tasks || [];
+      
+      // Filter tasks based on role:
+      // - MEMBER: Only see tasks assigned to them or unassigned tasks
+      // - MANAGER/ADMIN: See all tasks
+      if (user?.role === ROLES.MEMBER) {
+        fetchedTasks = fetchedTasks.filter((task) => {
+          if (!task.assignedTo) return true; // Show unassigned tasks
+          const assignedToId = typeof task.assignedTo === "object" 
+            ? (task.assignedTo.id || task.assignedTo._id)
+            : task.assignedTo;
+          return assignedToId === (user.id || user._id);
+        });
+      }
+      
+      setTasks(fetchedTasks);
     } catch (error) {
       toast.error("Failed to fetch tasks");
     } finally {
@@ -82,21 +113,83 @@ export default function Tasks() {
   const handleCreateTask = async (e) => {
     e.preventDefault();
     try {
-      const response = await taskAPI.create({
+      const taskData = {
         ...newTask,
         projectId: selectedProject,
-      });
-      setTasks([...tasks, response.data.task]);
+      };
+      // Only include assignedTo if it's set and user is a manager
+      if (!taskData.assignedTo || user?.role !== ROLES.MANAGER) {
+        delete taskData.assignedTo;
+      }
+      const response = await taskAPI.create(taskData);
+      const newTaskData = response.data.task;
+      
+      // Only add to tasks if user should see it (member sees only assigned, manager/admin sees all)
+      if (user?.role === ROLES.MEMBER) {
+        const assignedToId = typeof newTaskData.assignedTo === "object" 
+          ? (newTaskData.assignedTo.id || newTaskData.assignedTo._id)
+          : newTaskData.assignedTo;
+        if (assignedToId === (user.id || user._id) || !newTaskData.assignedTo) {
+          setTasks([...tasks, newTaskData]);
+        }
+      } else {
+        setTasks([...tasks, newTaskData]);
+      }
+      
       setIsModalOpen(false);
       setNewTask({
         title: "",
         description: "",
         projectId: "",
         status: TASK_STATUS.TODO,
+        assignedTo: "",
       });
       toast.success("Task created successfully");
     } catch (error) {
-      toast.error("Failed to create task");
+      toast.error(error.message || "Failed to create task");
+    }
+  };
+
+  const handleUpdateAssignee = async (taskId, assignedTo) => {
+    if (user?.role !== ROLES.MANAGER) {
+      toast.error("Only Managers can assign tasks");
+      return;
+    }
+    
+    try {
+      const taskData = { assignedTo: assignedTo || null };
+      const response = await taskAPI.update(taskId, taskData);
+      const updatedTask = response.data.task;
+      
+      // Update tasks list - if member, remove task if no longer assigned to them
+      if (user?.role === ROLES.MEMBER) {
+        const assignedToId = assignedTo 
+          ? (typeof updatedTask.assignedTo === "object" 
+              ? (updatedTask.assignedTo.id || updatedTask.assignedTo._id)
+              : updatedTask.assignedTo)
+          : null;
+        if (assignedToId === (user.id || user._id) || !assignedToId) {
+          setTasks(
+            tasks.map((task) =>
+              task._id === taskId ? updatedTask : task
+            )
+          );
+        } else {
+          // Remove task if no longer assigned to this member
+          setTasks(tasks.filter((task) => task._id !== taskId));
+        }
+      } else {
+        // Manager/Admin sees all tasks
+        setTasks(
+          tasks.map((task) =>
+            task._id === taskId ? updatedTask : task
+          )
+        );
+      }
+      
+      toast.success(`Task ${assignedTo ? "assigned" : "unassigned"} successfully`);
+    } catch (error) {
+      toast.error(error.message || "Failed to update assignee");
     }
   };
 
@@ -121,6 +214,14 @@ export default function Tasks() {
     value,
     label,
   }));
+  const memberOptions = [
+    { value: "", label: "Unassigned" },
+    ...teamMembers.map((m) => ({ value: m.id || m._id, label: m.name })),
+  ];
+
+  // Only MANAGER can assign tasks (not ADMIN)
+  const canAssignTasks = user?.role === ROLES.MANAGER;
+  const canDeleteTasks = user?.role === ROLES.ADMIN;
 
   if (loading) {
     return (
@@ -140,6 +241,21 @@ export default function Tasks() {
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             Manage your tasks with Kanban board
           </p>
+          {user?.role === "MANAGER" && (
+            <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+              ℹ️ As a Manager, you can assign tasks to team members. Only assigned users will see their tasks.
+            </p>
+          )}
+          {user?.role === "ADMIN" && (
+            <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
+              ℹ️ As an Admin, you can delete tasks and see all tasks, but cannot assign them (only Managers can assign)
+            </p>
+          )}
+          {user?.role === "MEMBER" && (
+            <p className="text-sm text-green-600 dark:text-green-400 mt-2">
+              ℹ️ As a Member, you can only see tasks assigned to you
+            </p>
+          )}
         </div>
         <div className="flex gap-4">
           {projects.length > 0 && (
@@ -208,23 +324,67 @@ export default function Tasks() {
                                   <CardTitle className="text-base">
                                     {task.title}
                                   </CardTitle>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                                    onClick={() => handleDeleteTask(task._id)}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  {canDeleteTasks && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                                      onClick={() => handleDeleteTask(task._id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
                                 </div>
                               </CardHeader>
-                              {task.description && (
-                                <CardContent className="pt-0">
+                              <CardContent className="pt-0 space-y-2">
+                                {task.description && (
                                   <p className="text-sm text-gray-600 dark:text-gray-400">
                                     {task.description}
                                   </p>
-                                </CardContent>
-                              )}
+                                )}
+                                <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center gap-2">
+                                    {task.assignedTo ? (
+                                      typeof task.assignedTo === "object" ? (
+                                        <div className="flex items-center gap-2">
+                                          <Avatar
+                                            name={task.assignedTo.name}
+                                            size="sm"
+                                          />
+                                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                                            {task.assignedTo.name}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <User className="h-4 w-4 text-gray-400" />
+                                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                                            Assigned
+                                          </span>
+                                        </div>
+                                      )
+                                    ) : (
+                                      <span className="text-xs text-gray-400">
+                                        Unassigned
+                                      </span>
+                                    )}
+                                  </div>
+                                  {canAssignTasks && (
+                                    <Select
+                                      value={
+                                        typeof task.assignedTo === "object"
+                                          ? task.assignedTo.id || task.assignedTo._id
+                                          : task.assignedTo || ""
+                                      }
+                                      onChange={(e) =>
+                                        handleUpdateAssignee(task._id, e.target.value)
+                                      }
+                                      options={memberOptions}
+                                      className="text-xs w-32"
+                                    />
+                                  )}
+                                </div>
+                              </CardContent>
                             </Card>
                           </div>
                         )}
@@ -275,6 +435,16 @@ export default function Tasks() {
             onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
             options={statusOptions}
           />
+          {canAssignTasks && (
+            <Select
+              label="Assign To"
+              value={newTask.assignedTo}
+              onChange={(e) =>
+                setNewTask({ ...newTask, assignedTo: e.target.value })
+              }
+              options={memberOptions}
+            />
+          )}
           <Button type="submit" className="w-full">
             Create Task
           </Button>

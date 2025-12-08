@@ -39,7 +39,8 @@ export default function Projects() {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!user?.teamId) {
-      toast.error("You must be part of a team to create projects");
+      toast.error("You must be part of a team to create projects. Please create a team first.");
+      setIsModalOpen(false);
       return;
     }
 
@@ -53,7 +54,7 @@ export default function Projects() {
       setNewProject({ name: "", description: "" });
       toast.success("Project created successfully");
     } catch (error) {
-      toast.error("Failed to create project");
+      toast.error(error.message || "Failed to create project");
     }
   };
 

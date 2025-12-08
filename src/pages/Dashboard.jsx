@@ -61,8 +61,42 @@ export default function Dashboard() {
           Dashboard
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Welcome back, {user?.name}!
+          Welcome back, {user?.name}! ({user?.role})
         </p>
+        <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Your Role Permissions:</h3>
+          <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+            {user?.role === "ADMIN" && (
+              <>
+                <li>✓ Can create, edit, and delete projects</li>
+                <li>✓ Can create, edit, and delete tasks</li>
+                <li>✓ Can see all messages and chat with everyone</li>
+                <li>✓ Can see all tasks (assigned and unassigned)</li>
+                <li>✓ Can manage teams</li>
+                <li>✗ Cannot assign tasks (only Managers can assign)</li>
+              </>
+            )}
+            {user?.role === "MANAGER" && (
+              <>
+                <li>✓ Can create and edit projects</li>
+                <li>✓ Can create, edit, and assign tasks to team members</li>
+                <li>✓ Can see all messages and chat with everyone</li>
+                <li>✓ Can see all tasks (assigned and unassigned)</li>
+                <li>✓ Can manage team tasks</li>
+                <li>✗ Cannot delete projects or tasks</li>
+              </>
+            )}
+            {user?.role === "MEMBER" && (
+              <>
+                <li>✓ Can view projects</li>
+                <li>✓ Can only see tasks assigned to you</li>
+                <li>✓ Can update task status (drag & drop)</li>
+                <li>✓ Can see all messages and chat with everyone</li>
+                <li>✗ Cannot create projects or assign tasks</li>
+              </>
+            )}
+          </ul>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

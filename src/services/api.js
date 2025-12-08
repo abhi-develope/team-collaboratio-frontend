@@ -20,7 +20,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const message = error.response?.data?.message || "An error occurred";
+    // Handle 401 unauthorized - clear token and redirect to login
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    }
+    const message = error.response?.data?.message || error.message || "An error occurred";
     return Promise.reject(new Error(message));
   }
 );
@@ -33,64 +40,79 @@ export const authAPI = {
       name,
       role,
     });
-    return data;
+    return { data: data.data || data };
   },
   login: async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
-    return data;
+    return { data: data.data || data };
   },
   getMe: async () => {
     const { data } = await api.get("/auth/me");
-    return data;
+    return { data: data.data || data };
   },
 };
 
 export const projectAPI = {
   getAll: async (teamId) => {
     const { data } = await api.get("/projects", { params: { teamId } });
-    return data;
+    return { data: data.data || data };
   },
   create: async (projectData) => {
     const { data } = await api.post("/projects", projectData);
-    return data;
+    return { data: data.data || data };
   },
   update: async (id, projectData) => {
     const { data } = await api.put(`/projects/${id}`, projectData);
-    return data;
+    return { data: data.data || data };
   },
   delete: async (id) => {
     const { data } = await api.delete(`/projects/${id}`);
-    return data;
+    return { data: data.data || data };
   },
 };
 
 export const taskAPI = {
   getAll: async (projectId) => {
     const { data } = await api.get("/tasks", { params: { projectId } });
-    return data;
+    return { data: data.data || data };
   },
   create: async (taskData) => {
     const { data } = await api.post("/tasks", taskData);
-    return data;
+    return { data: data.data || data };
   },
   update: async (id, taskData) => {
     const { data } = await api.put(`/tasks/${id}`, taskData);
-    return data;
+    return { data: data.data || data };
   },
   delete: async (id) => {
     const { data } = await api.delete(`/tasks/${id}`);
-    return data;
+    return { data: data.data || data };
   },
 };
 
 export const messageAPI = {
   getAll: async (teamId, limit = 50) => {
     const { data } = await api.get("/messages", { params: { teamId, limit } });
-    return data;
+    return { data: data.data || data };
   },
   send: async (content, teamId) => {
     const { data } = await api.post("/messages", { content, teamId });
-    return data;
+    return { data: data.data || data };
+  },
+};
+
+export const teamAPI = {
+  create: async (teamData) => {
+    const { data } = await api.post("/teams", teamData);
+    return { data: data.data || data };
+  },
+  getMyTeam: async () => {
+    const { data } = await api.get("/teams/my-team");
+    return { data: data.data || data };
+  },
+  getMembers: async (teamId) => {
+    const { data } = await api.get(`/teams/${teamId}/members`);
+    return { data: data.data || data };
   },
 };
 
