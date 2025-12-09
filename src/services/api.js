@@ -91,12 +91,12 @@ export const taskAPI = {
 };
 
 export const messageAPI = {
-  getAll: async (teamId, limit = 50) => {
-    const { data } = await api.get("/messages", { params: { teamId, limit } });
+  getAll: async (limit = 100) => {
+    const { data } = await api.get("/messages", { params: { limit } });
     return { data: data.data || data };
   },
-  send: async (content, teamId) => {
-    const { data } = await api.post("/messages", { content, teamId });
+  send: async (content) => {
+    const { data } = await api.post("/messages", { content });
     return { data: data.data || data };
   },
 };
@@ -112,6 +112,10 @@ export const teamAPI = {
   },
   getMembers: async (teamId) => {
     const { data } = await api.get(`/teams/${teamId}/members`);
+    return { data: data.data || data };
+  },
+  getAllMembers: async () => {
+    const { data } = await api.get("/teams/members/all");
     return { data: data.data || data };
   },
 };

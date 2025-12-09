@@ -32,23 +32,41 @@ export default function Tasks() {
 
   useEffect(() => {
     fetchProjects();
-    if (user?.teamId) {
+    // Fetch all members for managers to assign tasks
+    if (user?.role === ROLES.MANAGER || user?.role === ROLES.ADMIN) {
       fetchTeamMembers();
     }
-  }, [user?.teamId]);
+  }, [user?.role]);
 
   useEffect(() => {
     if (selectedProject) {
       fetchTasks();
+    } else if (projects.length === 0) {
+      // If no projects, set loading to false
+      setLoading(false);
     }
-  }, [selectedProject]);
+  }, [selectedProject, projects.length]);
 
   const fetchTeamMembers = async () => {
     try {
-      const response = await teamAPI.getMembers(user.teamId);
+      // Get all members for task assignment (works without team)
+      const response = await teamAPI.getAllMembers();
+      // Response already contains only MEMBER role users
       setTeamMembers(response.data.members || []);
     } catch (error) {
       console.error("Failed to fetch team members:", error);
+      // Fallback: try to get team members if user has a team
+      if (user?.teamId) {
+        try {
+          const fallbackResponse = await teamAPI.getMembers(user.teamId);
+          const membersOnly = (fallbackResponse.data.members || []).filter(
+            (member) => member.role === ROLES.MEMBER
+          );
+          setTeamMembers(membersOnly);
+        } catch (fallbackError) {
+          console.error("Failed to fetch team members (fallback):", fallbackError);
+        }
+      }
     }
   };
 
@@ -59,8 +77,10 @@ export default function Tasks() {
       if (response.data?.projects?.length > 0) {
         setSelectedProject(response.data.projects[0]._id);
       }
+      setLoading(false);
     } catch (error) {
       toast.error("Failed to fetch projects");
+      setLoading(false);
     }
   };
 
@@ -222,6 +242,8 @@ export default function Tasks() {
   // Only MANAGER can assign tasks (not ADMIN)
   const canAssignTasks = user?.role === ROLES.MANAGER;
   const canDeleteTasks = user?.role === ROLES.ADMIN;
+  // Only ADMIN and MANAGER can create tasks (MEMBERS cannot)
+  const canCreateTasks = user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
 
   if (loading) {
     return (
@@ -253,7 +275,7 @@ export default function Tasks() {
           )}
           {user?.role === "MEMBER" && (
             <p className="text-sm text-green-600 dark:text-green-400 mt-2">
-              ℹ️ As a Member, you can only see tasks assigned to you
+              ℹ️ As a Member, you can only see and update tasks assigned to you. You cannot create tasks.
             </p>
           )}
         </div>
@@ -266,10 +288,12 @@ export default function Tasks() {
               className="w-48"
             />
           )}
-          <Button onClick={() => setIsModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Task
-          </Button>
+          {canCreateTasks && (
+            <Button onClick={() => setIsModalOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Task
+            </Button>
+          )}
         </div>
       </div>
 

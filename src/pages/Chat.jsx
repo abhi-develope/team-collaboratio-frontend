@@ -17,30 +17,22 @@ export default function Chat() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    if (user?.teamId) {
-      fetchMessages();
-      socketService.joinTeam(user.teamId);
-      socketService.onMessage(handleNewMessage);
-    }
+    fetchMessages();
+    socketService.onMessage(handleNewMessage);
 
     return () => {
-      if (user?.teamId) {
-        socketService.offMessage();
-        socketService.leaveTeam(user.teamId);
-      }
+      socketService.offMessage();
     };
-  }, [user?.teamId]);
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   const fetchMessages = async () => {
-    if (!user?.teamId) return;
-
     try {
-      const response = await messageAPI.getAll(user.teamId);
-      // Everyone sees all messages regardless of role
+      const response = await messageAPI.getAll();
+      // Everyone sees all messages from all users
       setMessages(response.data?.messages || []);
     } catch (error) {
       toast.error("Failed to fetch messages");
@@ -59,15 +51,12 @@ export default function Chat() {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user?.teamId) {
-      if (!user?.teamId) {
-        toast.error("You must be part of a team to send messages");
-      }
+    if (!newMessage.trim()) {
       return;
     }
 
     try {
-      const response = await messageAPI.send(newMessage, user.teamId);
+      const response = await messageAPI.send(newMessage);
       // The message will be added via socket, but we can add it optimistically
       if (response.data?.message) {
         handleNewMessage(response.data.message);
@@ -82,36 +71,14 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  if (!user?.teamId) {
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            Team Chat
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Communicate with your team in real-time
-          </p>
-        </div>
-        <Card>
-          <CardContent className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-400">
-              You must be part of a team to use the chat feature. Please create or join a team first.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-          Team Chat
+          Global Chat
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Communicate with your team in real-time - All team members can see all messages
+          Chat with all users - All messages are visible to everyone
         </p>
       </div>
 
