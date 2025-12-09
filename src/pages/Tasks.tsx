@@ -26,8 +26,9 @@ import { Project, Task, User } from "@/types";
 
 type TaskList = Task[];
 
-const resolveId = (value: string | { _id?: string; id?: string } | undefined | null) =>
-  typeof value === "object" ? value?._id || value?.id || "" : value || "";
+const resolveId = (
+  value: string | { _id?: string; id?: string } | undefined | null
+) => (typeof value === "object" ? value?._id || value?.id || "" : value || "");
 
 export default function Tasks() {
   const { user } = useAuth();
@@ -37,7 +38,9 @@ export default function Tasks() {
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTask, setNewTask] = useState<Partial<Task> & { status: Task["status"] }>({
+  const [newTask, setNewTask] = useState<
+    Partial<Task> & { status: Task["status"] }
+  >({
     title: "",
     description: "",
     projectId: "",
@@ -54,6 +57,9 @@ export default function Tasks() {
     void fetchProjects();
     if (user?.role === ROLES.MANAGER) {
       void fetchAllMembers();
+    } else if (user?.role === ROLES.MEMBER) {
+      // Members should fetch their assigned tasks immediately
+      void fetchTasks();
     }
   }, [user?.role]);
 
@@ -63,7 +69,7 @@ export default function Tasks() {
       if (user?.role === ROLES.MANAGER) {
         void fetchProjectMembers(selectedProject);
       }
-    } else if (projects.length === 0) {
+    } else if (projects.length === 0 && user?.role !== ROLES.MEMBER) {
       setLoading(false);
     }
   }, [selectedProject, projects.length, user?.role]);
@@ -227,7 +233,9 @@ export default function Tasks() {
         );
       }
 
-      toast.success(`Task ${assignedTo ? "assigned" : "unassigned"} successfully`);
+      toast.success(
+        `Task ${assignedTo ? "assigned" : "unassigned"} successfully`
+      );
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Failed to update assignee";
@@ -290,20 +298,20 @@ export default function Tasks() {
           </p>
           {user?.role === "MANAGER" && (
             <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
-              ℹ️ As a Manager, you can assign tasks to team members. Only assigned users will see
-              their tasks.
+              ℹ️ As a Manager, you can assign tasks to team members. Only
+              assigned users will see their tasks.
             </p>
           )}
           {user?.role === "ADMIN" && (
             <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
-              ℹ️ As an Admin, you can delete tasks and see all tasks, but cannot assign them (only
-              Managers can assign)
+              ℹ️ As an Admin, you can delete tasks and see all tasks, but cannot
+              assign them (only Managers can assign)
             </p>
           )}
           {user?.role === "MEMBER" && (
             <p className="text-sm text-green-600 dark:text-green-400 mt-2">
-              ℹ️ As a Member, you can only see tasks assigned to you and update their status. You
-              cannot create tasks.
+              ℹ️ As a Member, you can only see tasks assigned to you and update
+              their status. You cannot create tasks.
             </p>
           )}
         </div>
@@ -374,11 +382,17 @@ export default function Tasks() {
           {Object.entries(STATUS_LABELS).map(([status, label]) => (
             <div key={status} className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[status]}`} />
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    STATUS_COLORS[status as Task["status"]]
+                  }`}
+                />
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                   {label}
                 </h3>
-                <Badge variant="default">{getTasksByStatus(status as Task["status"]).length}</Badge>
+                <Badge variant="default">
+                  {getTasksByStatus(status as Task["status"]).length}
+                </Badge>
               </div>
 
               <Droppable droppableId={status}>
@@ -392,96 +406,103 @@ export default function Tasks() {
                         : "bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700"
                     }`}
                   >
-                    {getTasksByStatus(status as Task["status"]).map((task, index) => (
-                      <Draggable
-                        key={task._id}
-                        draggableId={task._id || ""}
-                        index={index}
-                      >
-                        {(dragProvided, dragSnapshot) => (
-                          <div
-                            ref={dragProvided.innerRef}
-                            {...dragProvided.draggableProps}
-                            {...dragProvided.dragHandleProps}
-                          >
-                            <Card
-                              className={`cursor-move ${
-                                dragSnapshot.isDragging
-                                  ? "shadow-2xl rotate-2"
-                                  : "hover:shadow-md"
-                              } transition-all`}
+                    {getTasksByStatus(status as Task["status"]).map(
+                      (task, index) => (
+                        <Draggable
+                          key={task._id}
+                          draggableId={task._id || ""}
+                          index={index}
+                        >
+                          {(dragProvided, dragSnapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              {...dragProvided.dragHandleProps}
                             >
-                              <CardHeader>
-                                <div className="flex items-start justify-between gap-2">
-                                  <CardTitle className="text-base">
-                                    {task.title}
-                                  </CardTitle>
-                                  {canDeleteTasks && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                                      onClick={() => task._id && handleDeleteTask(task._id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </CardHeader>
-                              <CardContent className="pt-0 space-y-2">
-                                {task.description && (
-                                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    {task.description}
-                                  </p>
-                                )}
-                                <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
-                                  <div className="flex items-center gap-2">
-                                    {task.assignedTo ? (
-                                      typeof task.assignedTo === "object" ? (
-                                        <div className="flex items-center gap-2">
-                                          <Avatar
-                                            name={task.assignedTo.name}
-                                            size="sm"
-                                          />
-                                          <span className="text-xs text-gray-600 dark:text-gray-400">
-                                            {task.assignedTo.name}
-                                          </span>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2">
-                                          <UserIcon className="h-4 w-4 text-gray-400" />
-                                          <span className="text-xs text-gray-600 dark:text-gray-400">
-                                            Assigned
-                                          </span>
-                                        </div>
-                                      )
-                                    ) : (
-                                      <span className="text-xs text-gray-400">
-                                        Unassigned
-                                      </span>
+                              <Card
+                                className={`cursor-move ${
+                                  dragSnapshot.isDragging
+                                    ? "shadow-2xl rotate-2"
+                                    : "hover:shadow-md"
+                                } transition-all`}
+                              >
+                                <CardHeader>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <CardTitle className="text-base">
+                                      {task.title}
+                                    </CardTitle>
+                                    {canDeleteTasks && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                                        onClick={() =>
+                                          task._id && handleDeleteTask(task._id)
+                                        }
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
                                     )}
                                   </div>
-                                  {canAssignTasks && (
-                                    <Select
-                                      value={
-                                        typeof task.assignedTo === "object"
-                                          ? resolveId(task.assignedTo)
-                                          : task.assignedTo || ""
-                                      }
-                                      onChange={(e) =>
-                                        handleUpdateAssignee(task._id || "", e.target.value)
-                                      }
-                                      options={memberOptions}
-                                      className="text-xs w-32"
-                                    />
+                                </CardHeader>
+                                <CardContent className="pt-0 space-y-2">
+                                  {task.description && (
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                      {task.description}
+                                    </p>
                                   )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                                  <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="flex items-center gap-2">
+                                      {task.assignedTo ? (
+                                        typeof task.assignedTo === "object" ? (
+                                          <div className="flex items-center gap-2">
+                                            <Avatar
+                                              name={task.assignedTo.name}
+                                              size="sm"
+                                            />
+                                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                                              {task.assignedTo.name}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-2">
+                                            <UserIcon className="h-4 w-4 text-gray-400" />
+                                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                                              Assigned
+                                            </span>
+                                          </div>
+                                        )
+                                      ) : (
+                                        <span className="text-xs text-gray-400">
+                                          Unassigned
+                                        </span>
+                                      )}
+                                    </div>
+                                    {canAssignTasks && (
+                                      <Select
+                                        value={
+                                          typeof task.assignedTo === "object"
+                                            ? resolveId(task.assignedTo)
+                                            : task.assignedTo || ""
+                                        }
+                                        onChange={(e) =>
+                                          handleUpdateAssignee(
+                                            task._id || "",
+                                            e.target.value
+                                          )
+                                        }
+                                        options={memberOptions}
+                                        className="text-xs w-32"
+                                      />
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          )}
+                        </Draggable>
+                      )
+                    )}
                     {provided.placeholder}
                   </div>
                 )}
@@ -525,7 +546,10 @@ export default function Tasks() {
             label="Status"
             value={newTask.status}
             onChange={(e) =>
-              setNewTask({ ...newTask, status: e.target.value as Task["status"] })
+              setNewTask({
+                ...newTask,
+                status: e.target.value as Task["status"],
+              })
             }
             options={statusOptions}
           />
@@ -547,4 +571,3 @@ export default function Tasks() {
     </div>
   );
 }
-
