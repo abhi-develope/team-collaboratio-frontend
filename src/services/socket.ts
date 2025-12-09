@@ -1,14 +1,12 @@
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
 
 class SocketService {
-  constructor() {
-    this.socket = null;
-  }
+  private socket: Socket | null = null;
 
-  connect(token) {
-    if (this.socket?.connected) return;
+  connect(token: string | null) {
+    if (this.socket?.connected || !token) return;
 
     this.socket = io(SOCKET_URL, {
       auth: { token },
@@ -23,7 +21,7 @@ class SocketService {
       console.log("❌ Socket disconnected");
     });
 
-    this.socket.on("error", (error) => {
+    this.socket.on("error", (error: unknown) => {
       console.error("Socket error:", error);
     });
   }
@@ -35,46 +33,38 @@ class SocketService {
     }
   }
 
-  joinTeam(teamId) {
+  joinTeam(teamId: string) {
     if (this.socket) {
       this.socket.emit("join-team", teamId);
     }
   }
 
-  leaveTeam(teamId) {
+  leaveTeam(teamId: string) {
     if (this.socket) {
       this.socket.emit("leave-team", teamId);
     }
   }
 
-  sendMessage(teamId, message) {
+  sendMessage(teamId: string, message: string) {
     if (this.socket) {
       this.socket.emit("send-message", { teamId, message });
     }
   }
 
-  onMessage(callback) {
-    if (this.socket) {
-      this.socket.on("new-message", callback);
-    }
+  onMessage(callback: (message: unknown) => void) {
+    this.socket?.on("new-message", callback);
   }
 
-  onTaskUpdate(callback) {
-    if (this.socket) {
-      this.socket.on("task-updated", callback);
-    }
+  onTaskUpdate(callback: (payload: unknown) => void) {
+    this.socket?.on("task-updated", callback);
   }
 
   offMessage() {
-    if (this.socket) {
-      this.socket.off("new-message");
-    }
+    this.socket?.off("new-message");
   }
 
   offTaskUpdate() {
-    if (this.socket) {
-      this.socket.off("task-updated");
-    }
+    this.socket?.off("task-updated");
   }
 
   getSocket() {
@@ -83,3 +73,4 @@ class SocketService {
 }
 
 export default new SocketService();
+

@@ -5,9 +5,16 @@ import {
   CheckSquare,
   MessageSquare,
   Users,
+  LucideIcon,
 } from "lucide-react";
 
-const navigation = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const navigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderKanban },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
@@ -45,3 +52,4 @@ export default function Sidebar() {
     </aside>
   );
 }
+

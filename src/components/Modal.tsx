@@ -1,5 +1,13 @@
-import { useEffect } from "react";
+import { ReactNode, useEffect } from "react";
 import { X } from "lucide-react";
+
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: ReactNode;
+  children: ReactNode;
+  maxWidth?: string;
+}
 
 export default function Modal({
   isOpen,
@@ -7,7 +15,7 @@ export default function Modal({
   title,
   children,
   maxWidth = "max-w-md",
-}) {
+}: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -39,6 +47,7 @@ export default function Modal({
             {title}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
@@ -52,3 +61,4 @@ export default function Modal({
     </div>
   );
 }
+

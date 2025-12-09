@@ -1,7 +1,17 @@
-import { useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd";
 import { taskAPI, projectAPI, teamAPI } from "@/services/api";
-import { TASK_STATUS, STATUS_LABELS, STATUS_COLORS, ROLES } from "@/utils/constants";
+import {
+  TASK_STATUS,
+  STATUS_LABELS,
+  STATUS_COLORS,
+  ROLES,
+} from "@/utils/constants";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/Button";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/Card";
@@ -10,19 +20,24 @@ import Modal from "@/components/Modal";
 import Input from "@/components/Input";
 import Select from "@/components/Select";
 import Avatar from "@/components/Avatar";
-import { Plus, Trash2, User } from "lucide-react";
+import { Plus, Trash2, User as UserIcon } from "lucide-react";
 import toast from "react-hot-toast";
+import { Project, Task, User } from "@/types";
+
+type TaskList = Task[];
+
+const resolveId = (value: string | { _id?: string; id?: string } | undefined | null) =>
+  typeof value === "object" ? value?._id || value?.id || "" : value || "";
 
 export default function Tasks() {
   const { user } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [selectedProject, setSelectedProject] = useState("");
+  const [tasks, setTasks] = useState<TaskList>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teamMembers, setTeamMembers] = useState<User[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
-  const [newTask, setNewTask] = useState({
+  const [newTask, setNewTask] = useState<Partial<Task> & { status: Task["status"] }>({
     title: "",
     description: "",
     projectId: "",
@@ -30,23 +45,25 @@ export default function Tasks() {
     assignedTo: "",
   });
 
+  const canAssignTasks = user?.role === ROLES.MANAGER;
+  const canDeleteTasks = user?.role === ROLES.ADMIN;
+  const canCreateTasks =
+    user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
+
   useEffect(() => {
-    fetchProjects();
-    // Preload members list for managers to ensure dropdown has users even before selecting a project
+    void fetchProjects();
     if (user?.role === ROLES.MANAGER) {
-      fetchAllMembers();
+      void fetchAllMembers();
     }
   }, [user?.role]);
 
   useEffect(() => {
     if (selectedProject) {
-      fetchTasks();
-      // Refresh team members for the selected project (manager view)
+      void fetchTasks();
       if (user?.role === ROLES.MANAGER) {
-        fetchProjectMembers(selectedProject);
+        void fetchProjectMembers(selectedProject);
       }
     } else if (projects.length === 0) {
-      // If no projects, set loading to false
       setLoading(false);
     }
   }, [selectedProject, projects.length, user?.role]);
@@ -63,18 +80,14 @@ export default function Tasks() {
     }
   };
 
-  const fetchProjectMembers = async (projectId) => {
+  const fetchProjectMembers = async (projectId: string) => {
     if (!projectId) return;
     const project = projects.find((p) => p._id === projectId);
     if (!project) return;
 
-    const teamId =
-      typeof project.teamId === "object"
-        ? project.teamId._id || project.teamId.id
-        : project.teamId;
+    const teamId = resolveId(project.teamId);
 
     try {
-      // Prefer project-specific team members; fallback to all members if empty
       const response = await teamAPI.getMembers(teamId);
       let membersOnly = (response.data.members || []).filter(
         (member) => member.role === ROLES.MEMBER
@@ -92,10 +105,13 @@ export default function Tasks() {
 
   const fetchProjects = async () => {
     try {
-      const response = await projectAPI.getAll(user?.teamId || undefined);
-      setProjects(response.data?.projects || []);
-      if (response.data?.projects?.length > 0) {
-        setSelectedProject(response.data.projects[0]._id);
+      const response = await projectAPI.getAll(
+        resolveId(user?.teamId as string | { _id?: string; id?: string })
+      );
+      const fetchedProjects = response.data?.projects || [];
+      setProjects(fetchedProjects);
+      if (fetchedProjects.length > 0) {
+        setSelectedProject(fetchedProjects[0]._id || "");
       }
       setLoading(false);
     } catch (error) {
@@ -109,21 +125,15 @@ export default function Tasks() {
     try {
       const response = await taskAPI.getAll(selectedProject);
       let fetchedTasks = response.data?.tasks || [];
-      
-      // Filter tasks based on role:
-      // - MEMBER: Only see tasks assigned to them
-      // - MANAGER/ADMIN: See all tasks
+
       if (user?.role === ROLES.MEMBER) {
         fetchedTasks = fetchedTasks.filter((task) => {
-          // Members only see tasks assigned to them (not unassigned tasks)
           if (!task.assignedTo) return false;
-          const assignedToId = typeof task.assignedTo === "object" 
-            ? (task.assignedTo.id || task.assignedTo._id)
-            : task.assignedTo;
-          return assignedToId === (user.id || user._id);
+          const assignedToId = resolveId(task.assignedTo as never);
+          return assignedToId === resolveId(user._id || user.id || "");
         });
       }
-      
+
       setTasks(fetchedTasks);
     } catch (error) {
       toast.error("Failed to fetch tasks");
@@ -132,11 +142,11 @@ export default function Tasks() {
     }
   };
 
-  const handleDragEnd = async (result) => {
+  const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) return;
 
     const { draggableId, destination } = result;
-    const newStatus = destination.droppableId;
+    const newStatus = destination.droppableId as Task["status"];
 
     try {
       await taskAPI.update(draggableId, { status: newStatus });
@@ -151,33 +161,28 @@ export default function Tasks() {
     }
   };
 
-  const handleCreateTask = async (e) => {
+  const handleCreateTask = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      const taskData = {
+      const taskData: Partial<Task> = {
         ...newTask,
         projectId: selectedProject,
       };
-      // Only include assignedTo if it's set and user is a manager
       if (!taskData.assignedTo || user?.role !== ROLES.MANAGER) {
         delete taskData.assignedTo;
       }
       const response = await taskAPI.create(taskData);
       const newTaskData = response.data.task;
-      
-      // Only add to tasks if user should see it (member sees only assigned, manager/admin sees all)
+
       if (user?.role === ROLES.MEMBER) {
-        const assignedToId = typeof newTaskData.assignedTo === "object" 
-          ? (newTaskData.assignedTo.id || newTaskData.assignedTo._id)
-          : newTaskData.assignedTo;
-        // Members only see tasks assigned to them (not unassigned)
-        if (assignedToId === (user.id || user._id)) {
+        const assignedToId = resolveId(newTaskData.assignedTo as never);
+        if (assignedToId === resolveId(user._id || user.id || "")) {
           setTasks([...tasks, newTaskData]);
         }
       } else {
         setTasks([...tasks, newTaskData]);
       }
-      
+
       setIsModalOpen(false);
       setNewTask({
         title: "",
@@ -187,56 +192,50 @@ export default function Tasks() {
         assignedTo: "",
       });
       toast.success("Task created successfully");
-    } catch (error) {
-      toast.error(error.message || "Failed to create task");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create task";
+      toast.error(message);
     }
   };
 
-  const handleUpdateAssignee = async (taskId, assignedTo) => {
+  const handleUpdateAssignee = async (taskId: string, assignedTo: string) => {
     if (user?.role !== ROLES.MANAGER) {
       toast.error("Only Managers can assign tasks");
       return;
     }
-    
+
     try {
       const taskData = { assignedTo: assignedTo || null };
       const response = await taskAPI.update(taskId, taskData);
       const updatedTask = response.data.task;
-      
-      // Update tasks list - if member, remove task if no longer assigned to them
+
       if (user?.role === ROLES.MEMBER) {
-        const assignedToId = assignedTo 
-          ? (typeof updatedTask.assignedTo === "object" 
-              ? (updatedTask.assignedTo.id || updatedTask.assignedTo._id)
-              : updatedTask.assignedTo)
+        const assignedToId = assignedTo
+          ? resolveId(updatedTask.assignedTo as never)
           : null;
-        // Members only see tasks assigned to them (not unassigned)
-        if (assignedToId === (user.id || user._id)) {
+        if (assignedToId === resolveId(user._id || user.id || "")) {
           setTasks(
-            tasks.map((task) =>
-              task._id === taskId ? updatedTask : task
-            )
+            tasks.map((task) => (task._id === taskId ? updatedTask : task))
           );
         } else {
-          // Remove task if no longer assigned to this member
           setTasks(tasks.filter((task) => task._id !== taskId));
         }
       } else {
-        // Manager/Admin sees all tasks
         setTasks(
-          tasks.map((task) =>
-            task._id === taskId ? updatedTask : task
-          )
+          tasks.map((task) => (task._id === taskId ? updatedTask : task))
         );
       }
-      
+
       toast.success(`Task ${assignedTo ? "assigned" : "unassigned"} successfully`);
-    } catch (error) {
-      toast.error(error.message || "Failed to update assignee");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to update assignee";
+      toast.error(message);
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
+  const handleDeleteTask = async (taskId: string) => {
     if (!confirm("Are you sure you want to delete this task?")) return;
 
     try {
@@ -248,12 +247,17 @@ export default function Tasks() {
     }
   };
 
-  const getTasksByStatus = (status) => {
-    return tasks.filter((task) => task.status === status);
-  };
+  const getTasksByStatus = (status: Task["status"]) =>
+    tasks.filter((task) => task.status === status);
 
-  const selectedProjectObj = projects.find((p) => p._id === selectedProject);
-  const projectOptions = projects.map((p) => ({ value: p._id, label: p.name }));
+  const selectedProjectObj = useMemo(
+    () => projects.find((p) => p._id === selectedProject),
+    [projects, selectedProject]
+  );
+  const projectOptions = projects.map((p) => ({
+    value: p._id || "",
+    label: p.name,
+  }));
   const statusOptions = Object.entries(STATUS_LABELS).map(([value, label]) => ({
     value,
     label,
@@ -261,21 +265,15 @@ export default function Tasks() {
   const memberOptions = [
     { value: "", label: "Unassigned" },
     ...teamMembers.map((m) => ({
-      value: m.id || m._id,
+      value: resolveId(m._id || m.id || ""),
       label: `${m.name}${m.email ? ` (${m.email})` : ""}`,
     })),
   ];
 
-  // Only MANAGER can assign tasks (not ADMIN)
-  const canAssignTasks = user?.role === ROLES.MANAGER;
-  const canDeleteTasks = user?.role === ROLES.ADMIN;
-  // Only ADMIN and MANAGER can create tasks (MEMBERS cannot)
-  const canCreateTasks = user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -292,17 +290,20 @@ export default function Tasks() {
           </p>
           {user?.role === "MANAGER" && (
             <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
-              ℹ️ As a Manager, you can assign tasks to team members. Only assigned users will see their tasks.
+              ℹ️ As a Manager, you can assign tasks to team members. Only assigned users will see
+              their tasks.
             </p>
           )}
           {user?.role === "ADMIN" && (
             <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
-              ℹ️ As an Admin, you can delete tasks and see all tasks, but cannot assign them (only Managers can assign)
+              ℹ️ As an Admin, you can delete tasks and see all tasks, but cannot assign them (only
+              Managers can assign)
             </p>
           )}
           {user?.role === "MEMBER" && (
             <p className="text-sm text-green-600 dark:text-green-400 mt-2">
-              ℹ️ As a Member, you can only see tasks assigned to you and update their status. You cannot create tasks.
+              ℹ️ As a Member, you can only see tasks assigned to you and update their status. You
+              cannot create tasks.
             </p>
           )}
         </div>
@@ -329,7 +330,9 @@ export default function Tasks() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Team members for this project</CardTitle>
+                <CardTitle className="text-lg">
+                  Team members for this project
+                </CardTitle>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   You can assign tasks only to members of the project's team.
                 </p>
@@ -346,7 +349,7 @@ export default function Tasks() {
               <div className="flex flex-wrap gap-3">
                 {teamMembers.map((member) => (
                   <div
-                    key={member._id || member.id}
+                    key={resolveId(member._id || member.id || "")}
                     className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700"
                   >
                     <Avatar name={member.name} size="sm" />
@@ -371,15 +374,11 @@ export default function Tasks() {
           {Object.entries(STATUS_LABELS).map(([status, label]) => (
             <div key={status} className="space-y-4">
               <div className="flex items-center gap-2">
-                <div
-                  className={`w-3 h-3 rounded-full ${STATUS_COLORS[status]}`}
-                />
+                <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[status]}`} />
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                   {label}
                 </h3>
-                <Badge variant="default">
-                  {getTasksByStatus(status).length}
-                </Badge>
+                <Badge variant="default">{getTasksByStatus(status as Task["status"]).length}</Badge>
               </div>
 
               <Droppable droppableId={status}>
@@ -393,21 +392,21 @@ export default function Tasks() {
                         : "bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700"
                     }`}
                   >
-                    {getTasksByStatus(status).map((task, index) => (
+                    {getTasksByStatus(status as Task["status"]).map((task, index) => (
                       <Draggable
                         key={task._id}
-                        draggableId={task._id}
+                        draggableId={task._id || ""}
                         index={index}
                       >
-                        {(provided, snapshot) => (
+                        {(dragProvided, dragSnapshot) => (
                           <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...dragProvided.dragHandleProps}
                           >
                             <Card
                               className={`cursor-move ${
-                                snapshot.isDragging
+                                dragSnapshot.isDragging
                                   ? "shadow-2xl rotate-2"
                                   : "hover:shadow-md"
                               } transition-all`}
@@ -422,7 +421,7 @@ export default function Tasks() {
                                       variant="ghost"
                                       size="icon"
                                       className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
-                                      onClick={() => handleDeleteTask(task._id)}
+                                      onClick={() => task._id && handleDeleteTask(task._id)}
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
@@ -450,7 +449,7 @@ export default function Tasks() {
                                         </div>
                                       ) : (
                                         <div className="flex items-center gap-2">
-                                          <User className="h-4 w-4 text-gray-400" />
+                                          <UserIcon className="h-4 w-4 text-gray-400" />
                                           <span className="text-xs text-gray-600 dark:text-gray-400">
                                             Assigned
                                           </span>
@@ -466,11 +465,11 @@ export default function Tasks() {
                                     <Select
                                       value={
                                         typeof task.assignedTo === "object"
-                                          ? task.assignedTo.id || task.assignedTo._id
+                                          ? resolveId(task.assignedTo)
                                           : task.assignedTo || ""
                                       }
                                       onChange={(e) =>
-                                        handleUpdateAssignee(task._id, e.target.value)
+                                        handleUpdateAssignee(task._id || "", e.target.value)
                                       }
                                       options={memberOptions}
                                       className="text-xs w-32"
@@ -525,13 +524,15 @@ export default function Tasks() {
           <Select
             label="Status"
             value={newTask.status}
-            onChange={(e) => setNewTask({ ...newTask, status: e.target.value })}
+            onChange={(e) =>
+              setNewTask({ ...newTask, status: e.target.value as Task["status"] })
+            }
             options={statusOptions}
           />
           {canAssignTasks && (
             <Select
               label="Assign To"
-              value={newTask.assignedTo}
+              value={(newTask.assignedTo as string) || ""}
               onChange={(e) =>
                 setNewTask({ ...newTask, assignedTo: e.target.value })
               }
@@ -546,3 +547,4 @@ export default function Tasks() {
     </div>
   );
 }
+

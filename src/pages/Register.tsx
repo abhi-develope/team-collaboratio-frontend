@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { ROLES } from "@/utils/constants";
@@ -6,9 +6,18 @@ import Button from "@/components/Button";
 import Input from "@/components/Input";
 import Select from "@/components/Select";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/Card";
+import { Role } from "@/types";
+
+interface RegisterForm {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  role: Role;
+}
 
 export default function Register() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegisterForm>({
     name: "",
     email: "",
     password: "",
@@ -25,7 +34,7 @@ export default function Register() {
     { value: ROLES.ADMIN, label: "Admin" },
   ];
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
@@ -92,7 +101,7 @@ export default function Register() {
               label="Role"
               value={formData.role}
               onChange={(e) =>
-                setFormData({ ...formData, role: e.target.value })
+                setFormData({ ...formData, role: e.target.value as Role })
               }
               options={roleOptions}
             />
@@ -138,3 +147,4 @@ export default function Register() {
     </div>
   );
 }
+

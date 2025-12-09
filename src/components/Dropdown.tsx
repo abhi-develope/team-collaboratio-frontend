@@ -1,12 +1,33 @@
-import { useState, useRef, useEffect } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 
-export default function Dropdown({ trigger, children, align = "right" }) {
+type DropdownAlignment = "left" | "right";
+
+interface DropdownProps {
+  trigger: ReactNode;
+  children: ReactNode;
+  align?: DropdownAlignment;
+}
+
+interface DropdownItemProps {
+  children: ReactNode;
+  onClick?: () => void;
+  className?: string;
+}
+
+export default function Dropdown({
+  trigger,
+  children,
+  align = "right",
+}: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -15,7 +36,7 @@ export default function Dropdown({ trigger, children, align = "right" }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const alignmentClasses = {
+  const alignmentClasses: Record<DropdownAlignment, string> = {
     left: "left-0",
     right: "right-0",
   };
@@ -35,9 +56,14 @@ export default function Dropdown({ trigger, children, align = "right" }) {
   );
 }
 
-export function DropdownItem({ children, onClick, className = "" }) {
+export function DropdownItem({
+  children,
+  onClick,
+  className = "",
+}: DropdownItemProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={`w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${className}`}
     >
@@ -45,3 +71,4 @@ export function DropdownItem({ children, onClick, className = "" }) {
     </button>
   );
 }
+

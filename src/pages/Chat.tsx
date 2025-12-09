@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { messageAPI } from "@/services/api";
 import socketService from "@/services/socket";
@@ -9,16 +9,19 @@ import Avatar from "@/components/Avatar";
 import { Send } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatTime } from "@/utils/helpers";
+import { Message, User } from "@/types";
 
 export default function Chat() {
   const { user } = useAuth();
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const messagesEndRef = useRef(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchMessages();
-    socketService.onMessage(handleNewMessage);
+    void fetchMessages();
+    socketService.onMessage((incoming) =>
+      handleNewMessage(incoming as Message)
+    );
 
     return () => {
       socketService.offMessage();
@@ -32,24 +35,23 @@ export default function Chat() {
   const fetchMessages = async () => {
     try {
       const response = await messageAPI.getAll();
-      // Everyone sees all messages from all users
       setMessages(response.data?.messages || []);
     } catch (error) {
       toast.error("Failed to fetch messages");
     }
   };
 
-  const handleNewMessage = (message) => {
+  const handleNewMessage = (message: Message) => {
     setMessages((prev) => {
-      // Check if message already exists to avoid duplicates
-      const exists = prev.some((m) => m._id === message._id || (m._id === message.id));
+      const exists = prev.some(
+        (m) => m._id === message._id || m._id === (message as never)["id"]
+      );
       if (exists) return prev;
-      // Everyone sees all messages
       return [...prev, message];
     });
   };
 
-  const handleSend = async (e) => {
+  const handleSend = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!newMessage.trim()) {
       return;
@@ -57,13 +59,14 @@ export default function Chat() {
 
     try {
       const response = await messageAPI.send(newMessage);
-      // The message will be added via socket, but we can add it optimistically
       if (response.data?.message) {
         handleNewMessage(response.data.message);
       }
       setNewMessage("");
-    } catch (error) {
-      toast.error(error.message || "Failed to send message");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to send message";
+      toast.error(message);
     }
   };
 
@@ -95,49 +98,53 @@ export default function Chat() {
             ) : (
               messages.map((message) => {
                 const sender =
-                  typeof message.senderId === "object" ? message.senderId : null;
-                const senderId = sender?.id || sender?._id || message.senderId;
-                const isOwn = user?.id === senderId || user?._id === senderId;
+                  typeof message.senderId === "object"
+                    ? (message.senderId as User)
+                    : null;
+                const senderId = sender?._id || sender?.id || message.senderId;
+                const isOwn =
+                  (!!user?.id && user.id === senderId) ||
+                  (!!user?._id && user._id === senderId);
 
-              return (
-                <div
-                  key={message._id}
-                  className={`flex gap-3 ${
-                    isOwn ? "flex-row-reverse" : ""
-                  } animate-fade-in`}
-                >
-                  <Avatar name={sender?.name || "User"} size="md" />
+                return (
                   <div
-                    className={`flex flex-col max-w-md ${
-                      isOwn ? "items-end" : ""
-                    }`}
+                    key={message._id || `${message.timestamp}-${senderId}`}
+                    className={`flex gap-3 ${
+                      isOwn ? "flex-row-reverse" : ""
+                    } animate-fade-in`}
                   >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {sender?.name || "Unknown"}
-                      </span>
-                      {sender?.role && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                          {sender.role}
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatTime(message.timestamp)}
-                      </span>
-                    </div>
+                    <Avatar name={sender?.name || "User"} size="md" />
                     <div
-                      className={`rounded-2xl px-4 py-2 ${
-                        isOwn
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      className={`flex flex-col max-w-md ${
+                        isOwn ? "items-end" : ""
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {sender?.name || "Unknown"}
+                        </span>
+                        {sender?.role && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                            {sender.role}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatTime(message.timestamp)}
+                        </span>
+                      </div>
+                      <div
+                        className={`rounded-2xl px-4 py-2 ${
+                          isOwn
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        }`}
+                      >
+                        <p className="text-sm">{message.content}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -158,3 +165,4 @@ export default function Chat() {
     </div>
   );
 }
+

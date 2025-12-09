@@ -1,4 +1,12 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+  Dispatch,
+  SetStateAction,
+} from "react";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -9,24 +17,35 @@ import { auth } from "@/services/firebase";
 import { authAPI } from "@/services/api";
 import socketService from "@/services/socket";
 import toast from "react-hot-toast";
+import { Role, User } from "@/types";
 
-const AuthContext = createContext(undefined);
+interface AuthContextValue {
+  user: User | null;
+  loading: boolean;
+  token: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string, role: Role) => Promise<void>;
+  logout: () => Promise<void>;
+  setUser: Dispatch<SetStateAction<User | null>>;
+}
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem("token"));
+  const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          const token = localStorage.getItem("token");
-          if (token) {
+          const existingToken = localStorage.getItem("token");
+          if (existingToken) {
             const response = await authAPI.getMe();
             setUser(response.data.user);
-            setToken(token);
-            socketService.connect(token);
+            setToken(existingToken);
+            socketService.connect(existingToken);
           } else {
             setUser(null);
           }
@@ -47,7 +66,7 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email: string, password: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       const response = await authAPI.login(email, password);
@@ -58,13 +77,14 @@ export function AuthProvider({ children }) {
 
       socketService.connect(response.data.token);
       toast.success("Login successful!");
-    } catch (error) {
-      toast.error(error.message || "Login failed");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Login failed";
+      toast.error(message);
       throw error;
     }
   };
 
-  const register = async (email, password, name, role) => {
+  const register = async (email: string, password: string, name: string, role: Role) => {
     try {
       await createUserWithEmailAndPassword(auth, email, password);
       const response = await authAPI.register(email, password, name, role);
@@ -75,8 +95,9 @@ export function AuthProvider({ children }) {
 
       socketService.connect(response.data.token);
       toast.success("Registration successful!");
-    } catch (error) {
-      toast.error(error.message || "Registration failed");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Registration failed";
+      toast.error(message);
       throw error;
     }
   };
@@ -89,8 +110,9 @@ export function AuthProvider({ children }) {
       setUser(null);
       socketService.disconnect();
       toast.success("Logged out successfully");
-    } catch (error) {
-      toast.error(error.message || "Logout failed");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Logout failed";
+      toast.error(message);
       throw error;
     }
   };
@@ -111,3 +133,4 @@ export function useAuth() {
   }
   return context;
 }
+

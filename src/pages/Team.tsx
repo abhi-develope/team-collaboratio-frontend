@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/Card";
 import Avatar from "@/components/Avatar";
 import Badge from "@/components/Badge";
@@ -10,18 +10,25 @@ import { teamAPI } from "@/services/api";
 import socketService from "@/services/socket";
 import { Users, Plus } from "lucide-react";
 import toast from "react-hot-toast";
+import { Team as TeamType, User } from "@/types";
+
+const resolveId = (value: string | { _id?: string; id?: string } | undefined | null) =>
+  typeof value === "object" ? value?._id || value?.id || "" : value || "";
 
 export default function Team() {
   const { user, setUser } = useAuth();
-  const [members, setMembers] = useState([]);
-  const [team, setTeam] = useState(null);
+  const [members, setMembers] = useState<User[]>([]);
+  const [team, setTeam] = useState<TeamType | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newTeam, setNewTeam] = useState({ name: "", description: "" });
+  const [newTeam, setNewTeam] = useState<Pick<TeamType, "name" | "description">>({
+    name: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (user?.teamId) {
-      fetchTeamData();
+      void fetchTeamData();
     } else {
       setLoading(false);
     }
@@ -39,20 +46,19 @@ export default function Team() {
     }
   };
 
-  const handleCreateTeam = async (e) => {
+  const handleCreateTeam = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
       const response = await teamAPI.create(newTeam);
       setTeam(response.data.team);
-      setMembers([user]);
-      // Refresh user data from backend to ensure consistency
+      setMembers(user ? [user] : []);
+
       try {
         const { authAPI } = await import("@/services/api");
         const userResponse = await authAPI.getMe();
         setUser(userResponse.data.user);
-        // Join socket room for the new team
         if (userResponse.data.user.teamId) {
-          socketService.joinTeam(userResponse.data.user.teamId);
+          socketService.joinTeam(resolveId(userResponse.data.user.teamId));
         }
       } catch (err) {
         console.error("Failed to refresh user data:", err);
@@ -60,26 +66,28 @@ export default function Team() {
       setIsModalOpen(false);
       setNewTeam({ name: "", description: "" });
       toast.success("Team created successfully!");
-    } catch (error) {
-      toast.error(error.message || "Failed to create team");
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create team";
+      toast.error(message);
     }
   };
 
-  const getRoleBadgeVariant = (role) => {
+  const getRoleBadgeVariant = (role: string) => {
     switch (role) {
       case "ADMIN":
-        return "danger";
+        return "danger" as const;
       case "MANAGER":
-        return "warning";
+        return "warning" as const;
       default:
-        return "primary";
+        return "primary" as const;
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -124,7 +132,7 @@ export default function Team() {
               <div className="space-y-4">
                 {members.map((member) => (
                   <div
-                    key={member.id || member._id}
+                    key={resolveId(member._id || member.id || "")}
                     className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                   >
                     <div className="flex items-center gap-4">
@@ -202,3 +210,4 @@ export default function Team() {
     </div>
   );
 }
+

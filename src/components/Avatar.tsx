@@ -1,14 +1,28 @@
-export default function Avatar({ name, size = "md", className = "" }) {
-  const getInitials = (name) => {
-    return name
+import { ReactNode } from "react";
+
+type AvatarSize = "sm" | "md" | "lg" | "xl";
+
+interface AvatarProps {
+  name: string;
+  size?: AvatarSize;
+  className?: string;
+  children?: ReactNode;
+}
+
+export default function Avatar({
+  name,
+  size = "md",
+  className = "",
+}: AvatarProps) {
+  const getInitials = (fullName: string) =>
+    fullName
       .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase()
       .slice(0, 2);
-  };
 
-  const sizes = {
+  const sizes: Record<AvatarSize, string> = {
     sm: "w-8 h-8 text-xs",
     md: "w-10 h-10 text-sm",
     lg: "w-12 h-12 text-base",
@@ -23,3 +37,4 @@ export default function Avatar({ name, size = "md", className = "" }) {
     </div>
   );
 }
+
