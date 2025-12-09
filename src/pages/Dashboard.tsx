@@ -2,11 +2,18 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { projectAPI, taskAPI } from "@/services/api";
 import Card, { CardHeader, CardTitle, CardContent } from "@/components/Card";
-import { FolderKanban, CheckSquare, Clock, CheckCircle } from "lucide-react";
+import { FolderKanban, CheckSquare, Clock, CheckCircle, LucideIcon } from "lucide-react";
+
+interface Stats {
+  totalProjects: number;
+  totalTasks: number;
+  inProgress: number;
+  completed: number;
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<Stats>({
     totalProjects: 0,
     totalTasks: 0,
     inProgress: 0,
@@ -14,13 +21,13 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    fetchStats();
+    void fetchStats();
   }, []);
 
   const fetchStats = async () => {
     try {
       const [projectsRes, tasksRes] = await Promise.all([
-        projectAPI.getAll(user?.teamId || undefined),
+        projectAPI.getAll(user?.teamId as string | undefined),
         taskAPI.getAll(),
       ]);
 
@@ -36,7 +43,17 @@ export default function Dashboard() {
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color }) => (
+  const StatCard = ({
+    title,
+    value,
+    icon: Icon,
+    color,
+  }: {
+    title: string;
+    value: number;
+    icon: LucideIcon;
+    color: string;
+  }) => (
     <Card>
       <CardContent className="flex items-center justify-between py-6">
         <div>
@@ -64,7 +81,9 @@ export default function Dashboard() {
           Welcome back, {user?.name}! ({user?.role})
         </p>
         <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">Your Role Permissions:</h3>
+          <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+            Your Role Permissions:
+          </h3>
           <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
             {user?.role === "ADMIN" && (
               <>
@@ -128,3 +147,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

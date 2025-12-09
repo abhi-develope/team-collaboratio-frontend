@@ -4,11 +4,11 @@ import { useAuth } from "@/context/AuthContext";
 import Button from "./Button";
 import Avatar from "./Avatar";
 import Dropdown, { DropdownItem } from "./Dropdown";
-import { getInitials } from "@/utils/helpers";
 
 export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const displayName = user?.name || "User";
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
@@ -28,6 +28,7 @@ export default function Navbar() {
             size="icon"
             onClick={toggleTheme}
             className="rounded-full"
+            aria-label="Toggle theme"
           >
             {theme === "dark" ? (
               <Sun className="h-5 w-5" />
@@ -38,8 +39,8 @@ export default function Navbar() {
 
           <Dropdown
             trigger={
-              <button className="focus:outline-none">
-                <Avatar name={user?.name || "User"} size="md" />
+              <button className="focus:outline-none" aria-label="User menu">
+                <Avatar name={displayName} size="md" />
               </button>
             }
           >
@@ -66,3 +67,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { projectAPI } from "@/services/api";
 import { ROLES } from "@/utils/constants";
@@ -9,25 +9,34 @@ import Input from "@/components/Input";
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate } from "@/utils/helpers";
+import { Project } from "@/types";
 
 export default function Projects() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", description: "" });
+  const [newProject, setNewProject] = useState<Pick<Project, "name" | "description">>({
+    name: "",
+    description: "",
+  });
 
   const canManageProjects =
     user?.role === ROLES.ADMIN || user?.role === ROLES.MANAGER;
 
+  const resolvedTeamId =
+    typeof user?.teamId === "object"
+      ? user?.teamId?._id || (user?.teamId as { id?: string })?.id
+      : user?.teamId;
+
   useEffect(() => {
-    fetchProjects();
+    void fetchProjects();
   }, []);
 
   const fetchProjects = async () => {
     setLoading(true);
     try {
-      const response = await projectAPI.getAll(user?.teamId || undefined);
+      const response = await projectAPI.getAll(resolvedTeamId);
       setProjects(response.data?.projects || []);
     } catch (error) {
       toast.error("Failed to fetch projects");
@@ -36,10 +45,12 @@ export default function Projects() {
     }
   };
 
-  const handleCreate = async (e) => {
+  const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user?.teamId) {
-      toast.error("You must be part of a team to create projects. Please create a team first.");
+    if (!resolvedTeamId) {
+      toast.error(
+        "You must be part of a team to create projects. Please create a team first."
+      );
       setIsModalOpen(false);
       return;
     }
@@ -47,18 +58,19 @@ export default function Projects() {
     try {
       const response = await projectAPI.create({
         ...newProject,
-        teamId: user.teamId,
+        teamId: resolvedTeamId,
       });
       setProjects([...projects, response.data.project]);
       setIsModalOpen(false);
       setNewProject({ name: "", description: "" });
       toast.success("Project created successfully");
-    } catch (error) {
-      toast.error(error.message || "Failed to create project");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create project";
+      toast.error(message);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this project?")) return;
 
     try {
@@ -73,7 +85,7 @@ export default function Projects() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -105,14 +117,14 @@ export default function Projects() {
                 <div>
                   <CardTitle className="text-lg">{project.name}</CardTitle>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                    Created {formatDate(project.createdAt)}
+                    {project.createdAt ? `Created ${formatDate(project.createdAt)}` : ""}
                   </p>
                 </div>
                 {user?.role === ROLES.ADMIN && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDelete(project._id)}
+                    onClick={() => project._id && handleDelete(project._id)}
                     className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -180,3 +192,4 @@ export default function Projects() {
     </div>
   );
 }
+
