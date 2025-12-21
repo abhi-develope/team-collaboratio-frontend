@@ -23,6 +23,7 @@ import Avatar from "@/components/Avatar";
 import { Plus, Trash2, User as UserIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import { Project, Task, User } from "@/types";
+import TaskAssistant from "@/components/TaskAssistant";
 
 type TaskList = Task[];
 
@@ -568,6 +569,11 @@ export default function Tasks() {
           </Button>
         </form>
       </Modal>
+
+      <TaskAssistant
+        projectId={selectedProject || undefined}
+        onTaskUpdate={fetchTasks}
+      />
     </div>
   );
 }

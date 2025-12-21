@@ -130,6 +130,13 @@ export const taskAPI = {
     );
     return { data: unwrap<{ success: boolean }>(data) };
   },
+  assistant: async (command: string, projectId?: string) => {
+    const { data } = await api.post<ApiResponse<{ message: string; task?: Task; tasks?: Task[] }> | { message: string; task?: Task; tasks?: Task[] }>(
+      "/tasks/assistant",
+      { command, projectId }
+    );
+    return { data: unwrap<{ message: string; task?: Task; tasks?: Task[] }>(data) };
+  },
 };
 
 export const messageAPI = {
