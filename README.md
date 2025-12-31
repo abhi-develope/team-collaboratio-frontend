@@ -2,6 +2,8 @@
 
 A modern, responsive React-based frontend for the team collaboration platform with real-time features and intuitive user interface.
 
+Backend repo url:- https://github.com/abhi-develope/team-collaboration-backend
+
 ## Overview
 
 This frontend application provides a comprehensive interface for team collaboration, enabling users to manage projects, track tasks, communicate in real-time, and coordinate with team members. Built with React, TypeScript, and Tailwind CSS for a seamless user experience.
